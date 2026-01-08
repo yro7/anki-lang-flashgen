@@ -15,6 +15,7 @@ CARD_CSS = """
 .audio { margin-top: 20px; }
 .hint { color: #7f8c8d; font-size: 16px; margin-bottom: 10px; }
 .image-container img { max-height: 300px; max-width: 100%; margin-top: 15px; border-radius: 8px; }
+.explanation { font-size: 16px; color: #555; text-align: left; margin-top: 20px; padding: 10px; border-top: 1px dashed #ccc; background-color: #f9f9f9; border-radius: 5px; }
 """
 # --- TRANSLATION MODEL  ---
 # Front: Source Text
@@ -24,7 +25,7 @@ MODEL_TRANSLATION = genanki.Model(
     'AutoAnki: Translation',
     fields=[
         {'name': 'Question'}, {'name': 'Answer'}, 
-        {'name': 'Audio'}, {'name': 'Image'}, {'name': 'IPA'}
+        {'name': 'Audio'}, {'name': 'Image'}, {'name': 'IPA'}, {'name': 'Explanation'}
     ],
     templates=[{
         'name': 'Translation Card',
@@ -36,6 +37,7 @@ MODEL_TRANSLATION = genanki.Model(
         <div class="ipa">[{{IPA}}]</div>
         <div class="image-container">{{Image}}</div> 
         <div class="audio">{{Audio}}</div>
+        <div class="explanation">{{Explanation}}</div>
         ''',
     }],
     css=CARD_CSS
@@ -49,7 +51,7 @@ MODEL_LISTENING = genanki.Model(
     'AutoAnki: Listening',
     fields=[
         {'name': 'Question'}, {'name': 'Answer'}, 
-        {'name': 'Audio'}, {'name': 'Image'}, {'name': 'IPA'}
+        {'name': 'Audio'}, {'name': 'Image'}, {'name': 'IPA'}, {'name': 'Explanation'}
     ],
     templates=[{
         'name': 'Listening Card',
@@ -64,6 +66,7 @@ MODEL_LISTENING = genanki.Model(
         {{type:Answer}}
         <div class="ipa">[{{IPA}}]</div>
         <div class="translation"><small>({{Question}})</small></div>
+        <div class="explanation">{{Explanation}}</div>
         ''',
     }],
     css=CARD_CSS
@@ -76,11 +79,13 @@ MODEL_CLOZE = genanki.Model(
     fields=[
         {'name': 'Text'},
         {'name': 'Extra'},
+        {'name': 'Translation'},
+        {'name': 'Explanation'},
     ],
     templates=[{
         'name': 'Cloze Card',
-        'qfmt': '{{cloze:Text}}\n<br><br>\n{{type:cloze:Text}}',
-        'afmt': '{{cloze:Text}}\n<br><br>\n{{type:cloze:Text}}\n<hr>\n{{Extra}}',
+        'qfmt': '{{cloze:Text}}\n<br><div class="hint" style="margin-top: 20px; font-style: italic; color: #888;">({{Translation}})</div><br>\n{{type:cloze:Text}}',
+        'afmt': '{{cloze:Text}}\n<br><br>\n{{type:cloze:Text}}\n<hr>\n<div class="translation">{{Translation}}</div>\n<br>\n{{Extra}}\n<div class="explanation">{{Explanation}}</div>',
     }],
     css=CARD_CSS,
     model_type=genanki.Model.CLOZE
@@ -90,7 +95,7 @@ def _sanitize_filename(text: str) -> str:
     clean = re.sub(r'[^a-zA-Z0-9]', '', text).lower()
     return clean[:20]
 
-def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, back_text: str, ipa_text: str = "", mode: str = "translation") -> dict:
+def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, back_text: str, ipa_text: str = "", translation_text: str = "", explanation_text: str = "", mode: str = "translation") -> dict:
     """
     Create a flashcard selecting the right model based on 'mode'.
     """
@@ -131,9 +136,9 @@ def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, ba
         # Extra field: The word to guess (source) + Audio (maybe?)
         extra_field = f"<div class='translation'>{front_text}</div><div class='audio'>{audio_field}</div>"
 
-        fields = [cloze_text, extra_field]
+        fields = [cloze_text, extra_field, translation_text, explanation_text]
     else:
-        fields = [front_text, back_text, audio_field, image_field, ipa_text]
+        fields = [front_text, back_text, audio_field, image_field, ipa_text, explanation_text]
 
     note = genanki.Note(
         model=target_model,

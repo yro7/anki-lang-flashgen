@@ -16,16 +16,16 @@ AutoAnki generates Anki flashcard decks (`.apkg`) for language learning using Go
 
 1. **Install Dependencies**
    ```bash
-   pip install google-genai edge-tts genanki requests duckduckgo-search phonemizer
+   pip install google-genai edge-tts genanki requests duckduckgo-search phonemizer python-dotenv
    ```
    *Note: `phonemizer` requires `espeak-ng` to be installed on your system:*
    - macOS: `brew install espeak` or `brew install espeak-ng`
    - Linux: `sudo apt install espeak-ng`
 
 2. **Environment API Key**
-   Export your Google Gemini API key:
+   Create a `.env` file in the project root:
    ```bash
-   export GOOGLE_API_KEY="your_api_key"
+   GOOGLE_API_KEY="your_api_key_here"
    ```
 
 ## Usage
@@ -45,6 +45,7 @@ python main.py --topic "TOPIC" --target LANG_CODE [options]
 | `--source`, `-s` | Source language code. | `fr` |
 | `--count`, `-c` | Number of cards to generate. | `5` |
 | `--mode`, `-m` | Mode: `translation`, `listening`, or `cloze`. | `translation` |
+| `--explain` | Add detailed grammatical explanations for long sentences (>4 words). | `False` |
 
 ### Examples
 
@@ -60,9 +61,15 @@ python main.py -p "Business" -s en -t es -m listening
 ```
 
 **Cloze Test (Contextual Sentences)**
-*Fill in the missing word in a sentence.*
+*Fill in the missing word in a sentence. Includes full translation on the back.*
 ```bash
 python main.py -p "Travel" -s en -t fr -m cloze
+```
+
+**With Explanations**
+*Generate grammar explanations for sentences longer than 4 words.*
+```bash
+python main.py -p "Politics" -t de --explain
 ```
 
 ## Supported Languages

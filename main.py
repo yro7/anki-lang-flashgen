@@ -1,6 +1,9 @@
 import asyncio
 import argparse
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Custom modules
 import anki_creator
@@ -56,6 +59,12 @@ def parse_arguments():
         help="Generation mode: 'translation' (standard text), 'listening' (audio focus), or 'cloze' (fill-in-the-blank)."
     )
 
+    parser.add_argument(
+        "--explain", 
+        action="store_true",
+        help="Enable detailed grammar explanations for long sentences."
+    )
+
     return parser.parse_args()
 
 def print_usage():
@@ -107,7 +116,7 @@ async def main():
     print(f"🔹 Count:    {args.count}")
     print("-------------------------------------------")
 
-    vocab_list = await llm_call.generate_text(
+    vocab_list = await llm_call.generate_vocab(
         topic=args.topic,
         source_lang=args.source,
         target_lang=args.target,
@@ -123,12 +132,36 @@ async def main():
     for i, card in enumerate(vocab_list, 1):
         print(f"   [{i}/{len(vocab_list)}] Processing: {card['source']} -> {card['target']}")
 
+        # Defaults
+        front = ""
+        back = ""
+        translation_text = ""
+        audio = None
+        image = None
+        text_for_ipa = ""
+
         if args.mode == "listening":
             front = card['source'] 
             back = card['target']  
             text_for_ipa = card['target']
             audio = await tts_call.generate_audio(card['target'], args.target)
             image = None 
+
+        elif args.mode == "cloze":
+            # Cloze:
+            # Source = word to guess (displayed in Extra)
+            # Target = sentence with <word>
+            # Translation = full sentence translation
+            front = card['source']
+            back = card['target']
+            text_for_ipa = "" # usually no IPA for full sentence cloze, or maybe yes? keeping empty for now as per previous logic
+            
+            translation_text = card.get('translation', '')
+
+            # Audio for the full sentence (removed < > for natural reading)
+            clean_sentence = card['target'].replace("<", "").replace(">", "")
+            audio = await tts_call.generate_audio(clean_sentence, args.target)
+            image = None
 
         else: 
             # Translation : Front = Source, Back = Target
@@ -139,7 +172,19 @@ async def main():
             audio = await tts_call.generate_audio(back, args.target)
             image = image_api.get(card['source'])
 
-        ipa_transcription = ipa.get_ipa(text_for_ipa, args.target)
+        # --- Explanation Logic ---
+        explanation_html = ""
+        target_sentence_for_expl = card['target'].replace("<", "").replace(">", "") # Clean for analysis
+        word_count = len(target_sentence_for_expl.split())
+        
+        if args.explain and word_count >= 3:
+            explanation_html = await llm_call.generate_explanation(
+                sentence=target_sentence_for_expl,
+                source_lang=args.source,
+                target_lang=args.target
+            )
+
+        ipa_transcription = ipa.get_ipa(text_for_ipa, args.target) if text_for_ipa else ""
 
         flashcard = anki_creator.create_flashcard(
             audio, 
@@ -147,9 +192,15 @@ async def main():
             front, 
             back, 
             ipa_text=ipa_transcription,
+            translation_text=translation_text,
+            explanation_text=explanation_html,
             mode=args.mode,
         )
         flashcards.append(flashcard)
+
+        # Rate limiting kindness
+        if args.explain:
+            await asyncio.sleep(1.5)
 
     deck_name = f"{args.mode.capitalize()}: {args.topic}"
     filename = f"anki_{args.topic.replace(' ', '_')}_{args.target}.apkg"
