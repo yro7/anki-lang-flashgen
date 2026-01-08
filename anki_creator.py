@@ -5,6 +5,7 @@ import random
 
 MODEL_ID_TRANSLATION = 1607392319
 MODEL_ID_LISTENING = 1607392320
+MODEL_ID_CLOZE = 1607392321
 
 CARD_CSS = """
 .card { font-family: arial; font-size: 20px; text-align: center; color: black; background-color: white; }
@@ -55,16 +56,34 @@ MODEL_LISTENING = genanki.Model(
         'qfmt': '''
         <div class="hint">🎧 Écoutez et devinez...</div>
         <div class="audio">{{Audio}}</div>
+        {{type:Answer}}
         ''',
         'afmt': '''
         {{FrontSide}}
         <hr id="answer">
-        <div class="word">{{Answer}}</div>
+        {{type:Answer}}
         <div class="ipa">[{{IPA}}]</div>
         <div class="translation"><small>({{Question}})</small></div>
         ''',
     }],
     css=CARD_CSS
+)
+
+# --- CLOZE MODEL ---
+MODEL_CLOZE = genanki.Model(
+    MODEL_ID_CLOZE,
+    'AutoAnki: Cloze',
+    fields=[
+        {'name': 'Text'},
+        {'name': 'Extra'},
+    ],
+    templates=[{
+        'name': 'Cloze Card',
+        'qfmt': '{{cloze:Text}}\n<br><br>\n{{type:cloze:Text}}',
+        'afmt': '{{cloze:Text}}\n<br><br>\n{{type:cloze:Text}}\n<hr>\n{{Extra}}',
+    }],
+    css=CARD_CSS,
+    model_type=genanki.Model.CLOZE
 )
 
 def _sanitize_filename(text: str) -> str:
@@ -96,12 +115,29 @@ def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, ba
 
     if mode == "listening":
         target_model = MODEL_LISTENING
+    elif mode == "cloze":
+        target_model = MODEL_CLOZE
     else:
         target_model = MODEL_TRANSLATION
 
+    if mode == "cloze":
+        # In cloze mode, back_text contains the sentence with <word>.
+        # We need to convert <word> to {{c1::word}}.
+        # And we put the source word (prompt) in Extra.
+        
+        # Regex to find <...> and replace with {{c1::...}}
+        cloze_text = re.sub(r'<(.*?)>', r'{{c1::\1}}', back_text)
+        
+        # Extra field: The word to guess (source) + Audio (maybe?)
+        extra_field = f"<div class='translation'>{front_text}</div><div class='audio'>{audio_field}</div>"
+
+        fields = [cloze_text, extra_field]
+    else:
+        fields = [front_text, back_text, audio_field, image_field, ipa_text]
+
     note = genanki.Note(
         model=target_model,
-        fields=[front_text, back_text, audio_field, image_field, ipa_text]
+        fields=fields
     )
     
     return {

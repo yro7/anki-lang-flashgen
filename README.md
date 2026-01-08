@@ -1,145 +1,69 @@
-# AutoAnki: AI-Powered Flashcard Generator
+# AutoAnki
 
-**AutoAnki** is a command-line tool that automates the creation of high-quality Anki flashcard decks (`.apkg`). By leveraging **Google Gemini** for linguistic intelligence and **Microsoft Edge TTS** for natural-sounding audio, it generates vocabulary lists based on any specific topic you provide.
+AutoAnki generates Anki flashcard decks (`.apkg`) for language learning using Google Gemini and Microsoft Edge TTS.
 
-## 🚀 Features
+## Features
 
-* **Topic-Based Generation:** Simply provide a theme (e.g., "Business Meetings", "Fruits", "Slang"), and the AI generates relevant vocabulary.
-* **Multi-Modal Flashcards:**
-* **Text:** Source and target language translations (context-aware).
-* **Audio:** High-quality Neural TTS (Text-to-Speech) for pronunciation.
-* **Images:** Automatic image fetching for visual association (Translation mode).
+- **Topic-Based Generation**: Generates vocabulary lists based on a provided theme (e.g., "Business", "Travel", "Fruits").
+- **Audio & Pronunciation**: Adds neural Text-to-Speech (TTS) and IPA transcriptions to every card.
+- **Images**: Fetches relevant images for vocabulary cards.
+- **Three Learning Modes**:
+  - **Translation**: Standard cards (Source → Target + Image + Audio).
+  - **Listening**: Audio-focused cards. You listen to the word and must type the answer.
+  - **Cloze**: Fill-in-the-blank sentences (e.g., "The monkey eats a {{c1::banana}}").
 
+## Setup
 
-* **Dual Modes:**
-* `translation`: Standard vocabulary cards (Source → Target + Image + Audio).
-* `listening`: Focused on oral comprehension (Audio → Target + Source).
+1. **Install Dependencies**
+   ```bash
+   pip install google-genai edge-tts genanki requests duckduckgo-search phonemizer
+   ```
+   *Note: `phonemizer` requires `espeak-ng` to be installed on your system:*
+   - macOS: `brew install espeak` or `brew install espeak-ng`
+   - Linux: `sudo apt install espeak-ng`
 
+2. **Environment API Key**
+   Export your Google Gemini API key:
+   ```bash
+   export GOOGLE_API_KEY="your_api_key"
+   ```
 
-* **Direct Export:** Outputs ready-to-import `.apkg` files.
+## Usage
 
-## 🛠️ Prerequisites
-
-* Python 3.9+
-* A Google Gemini API Key
-
-## 📦 Installation
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/yourusername/autoanki.git
-cd autoanki
-
-```
-
-
-2. **Install dependencies:**
-Create a `requirements.txt` with the following content and install it:
-```text
-google-genai
-edge-tts
-genanki
-requests
-
-```
-
-
-Run the install command:
-```bash
-pip install -r requirements.txt
-
-```
-
-
-3. **Set up Environment Variables:**
-You must export your Google API key as an environment variable.
-**Linux/macOS:**
-```bash
-export GOOGLE_API_KEY="your_actual_api_key_here"
-
-```
-
-
-**Windows (PowerShell):**
-```powershell
-$env:GOOGLE_API_KEY="your_actual_api_key_here"
-
-```
-
-
-
-## 💻 Usage
-
-Run the script using `main.py`. The tool uses `argparse` for flexible configuration.
-
-### Syntax
+Run the script using `main.py`.
 
 ```bash
 python main.py --topic "TOPIC" --target LANG_CODE [options]
-
 ```
 
 ### Arguments
 
-| Flag | Long Flag | Required | Default | Description |
-| --- | --- | --- | --- | --- |
-| `-p` | `--topic` | ✅ | - | The subject/theme of the vocabulary list. |
-| `-t` | `--target` | ✅ | - | Target language code (e.g., `pl`, `es`, `en`). |
-| `-s` | `--source` | ❌ | `fr` | Source language code. |
-| `-c` | `--count` | ❌ | `5` | Number of flashcards to generate. |
-| `-m` | `--mode` | ❌ | `translation` | Generation mode: `translation` or `listening`. |
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--topic`, `-p` | Topic for vocabulary generation (e.g., "Fruits"). | **Required** |
+| `--target`, `-t` | Target language code (e.g., `pl`, `es`, `en`). | **Required** |
+| `--source`, `-s` | Source language code. | `fr` |
+| `--count`, `-c` | Number of cards to generate. | `5` |
+| `--mode`, `-m` | Mode: `translation`, `listening`, or `cloze`. | `translation` |
 
 ### Examples
 
-**1. Standard French to Polish vocabulary (Fruits):**
-
+**Standard Vocabulary (French → Polish)**
 ```bash
-python main.py --topic "Fruits" --source fr --target pl --count 10
-
+python main.py -p "Fruits" -t pl
 ```
 
-*Generates visual cards with French on the front and Polish on the back.*
-
-**2. English to Spanish Listening Practice:**
-
+**Listening Practice (English → Spanish)**
+*Audio plays, you type the Spanish word.*
 ```bash
-python main.py --topic "Business Meetings" --source en --target es --mode listening
-
+python main.py -p "Business" -s en -t es -m listening
 ```
 
-*Generates audio-focused cards. The front plays audio; the back reveals the text.*
+**Cloze Test (Contextual Sentences)**
+*Fill in the missing word in a sentence.*
+```bash
+python main.py -p "Travel" -s en -t fr -m cloze
+```
 
-## 📂 Project Structure
-
-* `main.py`: Entry point. Handles argument parsing and orchestrates the workflow.
-* `llm_call.py`: Interfaces with Google Gemini to generate structured JSON vocabulary lists.
-* `tts_call.py`: Generates audio assets using `edge-tts`.
-* `anki_creator.py`: Uses `genanki` to package media and text into an `.apkg` file.
-* `image_api.py`: Fetches relevant images for the cards.
-
-## 🌍 Supported Languages (TTS)
-
-The tool currently supports optimized neural voices for:
-
-* French (`fr`)
-* English (`en`)
-* Spanish (`es`)
-* German (`de`)
-* Polish (`pl`)
-* Italian (`it`)
-* Portuguese (`pt`)
-* Russian (`ru`)
-* Japanese (`ja`)
-* Chinese (`zh`)
-
-*Note: You can extend `VOICE_MAPPING` in `tts_call.py` to add more languages.*
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
+## Supported Languages
+Uses Edge TTS neural voices for: `fr`, `en`, `es`, `de`, `pl`, `it`, `pt`, `ru`, `ja`, `zh`.

@@ -51,9 +51,9 @@ def parse_arguments():
     parser.add_argument(
         "--mode", "-m",
         type=str,
-        choices=["translation", "listening"],
+        choices=["translation", "listening", "cloze"],
         default="translation",
-        help="Generation mode: 'translation' (standard text) or 'listening' (audio focus)."
+        help="Generation mode: 'translation' (standard text), 'listening' (audio focus), or 'cloze' (fill-in-the-blank)."
     )
 
     return parser.parse_args()

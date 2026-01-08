@@ -52,7 +52,14 @@ async def generate_text(topic: str, source_lang: str, target_lang: str, count: i
     mode_instruction = ""
     if mode == "listening":
         mode_instruction = "CONTEXT: This list is for an Oral Comprehension exercise. Choose words/phrases that are distinct and good for listening practice."
-    
+    elif mode == "cloze":
+        mode_instruction = """CONTEXT: This list is for a CLOZE DELETION test. 
+        For each item:
+        - "source": The word to guess (in Source Language).
+        - "target": A full sentence in Target Language containing the translated word, where the word to guess is surrounded by angle brackets like <word>.
+        Example: Source="Banana", Target="The monkey eats a <banana>."
+        """
+
     user_prompt = f"""
     Topic: "{topic}"
     Source: "{source_lang}"
