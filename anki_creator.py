@@ -91,11 +91,47 @@ MODEL_CLOZE = genanki.Model(
     model_type=genanki.Model.CLOZE
 )
 
+# --- DECLENSION MODEL ---
+MODEL_ID_DECLENSION = 1607392322
+MODEL_DECLENSION = genanki.Model(
+    MODEL_ID_DECLENSION,
+    'AutoAnki: Declension',
+    fields=[
+        {'name': 'Sentence'},
+        {'name': 'Translation'},
+        {'name': 'RootWord'},
+        {'name': 'CaseInfo'},
+        {'name': 'Audio'},
+        {'name': 'Explanation'}
+    ],
+    templates=[{
+        'name': 'Declension Card',
+        'qfmt': '''
+        <div class="translation">{{Translation}}</div>
+        <br>
+        <div class="word">{{cloze:Sentence}}</div>
+        <br>
+        <div class="hint">(Racine: {{RootWord}})</div>
+        ''',
+        'afmt': '''
+        <div class="translation">{{Translation}}</div>
+        <br>
+        <div class="word">{{cloze:Sentence}}</div>
+        <hr>
+        <div class="word" style="font-size: 24px; color: #27ae60;">{{CaseInfo}}</div>
+        <div class="audio">{{Audio}}</div>
+        <div class="explanation">{{Explanation}}</div>
+        '''
+    }],
+    css=CARD_CSS + " .hint { font-size: 18px; font-weight: bold; color: #d35400; }",
+    model_type=genanki.Model.CLOZE
+)
+
 def _sanitize_filename(text: str) -> str:
     clean = re.sub(r'[^a-zA-Z0-9]', '', text).lower()
     return clean[:20]
 
-def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, back_text: str, ipa_text: str = "", translation_text: str = "", explanation_text: str = "", mode: str = "translation") -> dict:
+def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, back_text: str, ipa_text: str = "", translation_text: str = "", explanation_text: str = "", mode: str = "translation", root_word: str = "", case_info: str = "") -> dict:
     """
     Create a flashcard selecting the right model based on 'mode'.
     """
@@ -104,10 +140,12 @@ def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, ba
     media_paths = []
     
     audio_filename = f"anki_audio_{clean_name}_{rand_id}.mp3"
-    with open(audio_filename, "wb") as f:
-        f.write(audio_bytes)
-    media_paths.append(audio_filename)
-    audio_field = f"[sound:{audio_filename}]"
+    audio_field = ""
+    if audio_bytes:
+        with open(audio_filename, "wb") as f:
+            f.write(audio_bytes)
+        media_paths.append(audio_filename)
+        audio_field = f"[sound:{audio_filename}]"
 
     # Handle Image (Only for Translation usually, but logic is generic)
     image_field = ""
@@ -122,6 +160,8 @@ def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, ba
         target_model = MODEL_LISTENING
     elif mode == "cloze":
         target_model = MODEL_CLOZE
+    elif mode == "declension":
+        target_model = MODEL_DECLENSION
     else:
         target_model = MODEL_TRANSLATION
 
@@ -137,6 +177,12 @@ def create_flashcard(audio_bytes: bytes, image_bytes: bytes, front_text: str, ba
         extra_field = f"<div class='translation'>{front_text}</div><div class='audio'>{audio_field}</div>"
 
         fields = [cloze_text, extra_field, translation_text, explanation_text]
+    elif mode == "declension":
+        # Declension Mode Fields: Sentence, Translation, RootWord, CaseInfo, Audio, Explanation
+        # back_text here is expected to be the masked sentence with {{c1::word}} already formatted or we format it.
+        # Let's assume main.py formats it to {{c1::word}}.
+        
+        fields = [back_text, translation_text, root_word, case_info, audio_field, explanation_text]
     else:
         fields = [front_text, back_text, audio_field, image_field, ipa_text, explanation_text]
 

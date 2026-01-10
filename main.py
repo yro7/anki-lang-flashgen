@@ -54,15 +54,15 @@ def parse_arguments():
     parser.add_argument(
         "--mode", "-m",
         type=str,
-        choices=["translation", "listening", "cloze"],
+        choices=["translation", "listening", "cloze", "custom", "declension"],
         default="translation",
-        help="Generation mode: 'translation' (standard text), 'listening' (audio focus), or 'cloze' (fill-in-the-blank)."
+        help="Generation mode: 'translation', 'listening', 'cloze', 'custom', or 'declension'.",
     )
 
     parser.add_argument(
         "--explain", 
         action="store_true",
-        help="Enable detailed grammar explanations for long sentences."
+        help="Enable detailed grammar explanations (best for full sentences)."
     )
 
     return parser.parse_args()
@@ -86,21 +86,22 @@ Optional Arguments:
   -s, --source   The source language code (default: "fr").
   -c, --count    Number of flashcards to generate (default: 5).
   -m, --mode     Generation mode:
-                 • 'translation'   (Standard: Source -> Target + Audio + Image)
-                 • 'listening' (Audio Focus: Audio -> Target + Source)
+                 • 'translation' (Standard: Source -> Target + Audio + Image)
+                 • 'listening'   (Audio Focus: Audio -> Target + Source)
+                 • 'cloze'       (Fill-in-the-blank)
+                 • 'custom'      (Follows detailed prompt in TOPIC)
 
 Examples:
   # Standard generation (French to Polish)
   python main.py -p "Les jours de la semaine" -t pl
 
-  # Listening mode with specific count (English to Spanish)
-  python main.py --topic "Business Meetings" --source en --target es --mode listening --count 10
+  # Custom complex prompt
+  python main.py --topic "Generate questions about history..." --mode custom --target en
     """
     print(usage_text)
     
 async def main():
     
-    print("aaa")
     if len(sys.argv) == 1:
         print_usage()
         sys.exit(1)
@@ -110,7 +111,7 @@ async def main():
     print("╔═════════════════════════════════════════╗")
     print("║   AutoAnki - Flashcard Generator        ║")
     print("╚═════════════════════════════════════════╝")
-    print(f"🔹 Topic:    {args.topic}")
+    print(f"🔹 Topic:    {args.topic[:50]}..." if len(args.topic) > 50 else f"🔹 Topic:    {args.topic}")
     print(f"🔹 Mode:     {args.mode}")
     print(f"🔹 Lang:     {args.source} -> {args.target}")
     print(f"🔹 Count:    {args.count}")
@@ -130,7 +131,14 @@ async def main():
 
     flashcards = []
     for i, card in enumerate(vocab_list, 1):
-        print(f"   [{i}/{len(vocab_list)}] Processing: {card['source']} -> {card['target']}")
+        if args.mode == "declension":
+            log_source = card.get('root_word', 'Unknown')
+            log_target = card.get('case_name_target', 'Unknown')
+        else:
+            log_source = card.get('source', 'Unknown')
+            log_target = card.get('target', 'Unknown')
+            
+        print(f"   [{i}/{len(vocab_list)}] Processing: {log_source} -> {log_target}")
 
         # Defaults
         front = ""
@@ -140,7 +148,45 @@ async def main():
         image = None
         text_for_ipa = ""
 
-        if args.mode == "listening":
+        if args.mode == "custom":
+             # Custom mode: Direct mapping, minimal interference
+            front = card['source']
+            back = card['target']
+            audio = None
+            image = None
+            text_for_ipa = "" 
+
+        elif args.mode == "declension":
+            # Declension Mode Logic
+            # Keys: sentence_fr, sentence_pl_masked, root_word, declined_word, case_name_source, case_name_target
+            
+            # 1. Prepare data for Anki
+            translation_text = card['sentence_fr']
+            root_word = card['root_word']
+            declined_word = card['declined_word']
+            
+            # Case Info: "Genitif (Dopełniacz)"
+            case_info = f"{card['case_name_source']} ({card['case_name_target']})"
+            
+            # 2. Format the sentence for Cloze: "Nie widzę ___." -> "Nie widzę {{c1::kota}}."
+            # We assume sentence_pl_masked has "___"
+            full_sentence = card['sentence_pl_masked'].replace("___", f"{{{{c1::{declined_word}}}}}")
+            back = full_sentence # In our model, 'Sentence' uses this
+            
+            front = "" # Not used in this model's logic directly (template handles it)
+            
+            # 3. Audio & Explanation
+            raw_sentence = card['sentence_pl_masked'].replace("___", declined_word)
+            audio = await tts_call.generate_audio(raw_sentence, args.target)
+            
+            explanation_html = await llm_call.generate_explanation(
+                sentence=raw_sentence,
+                source_lang=args.source,
+                target_lang=args.target,
+                mode="declension"
+            )
+
+        elif args.mode == "listening":
             front = card['source'] 
             back = card['target']  
             text_for_ipa = card['target']
@@ -172,19 +218,29 @@ async def main():
             audio = await tts_call.generate_audio(back, args.target)
             image = image_api.get(card['source'])
 
-        # --- Explanation Logic ---
-        explanation_html = ""
-        target_sentence_for_expl = card['target'].replace("<", "").replace(">", "") # Clean for analysis
-        word_count = len(target_sentence_for_expl.split())
-        
-        if args.explain and word_count >= 3:
-            explanation_html = await llm_call.generate_explanation(
-                sentence=target_sentence_for_expl,
-                source_lang=args.source,
-                target_lang=args.target
-            )
+        # --- Explanation Logic (General) ---
+        # Skip for declension as it handles its own explanation
+        if args.mode != "declension":
+            explanation_html = ""
+            target_sentence_for_expl = card['target'].replace("<", "").replace(">", "") if 'target' in card else ""
+            word_count = len(target_sentence_for_expl.split())
+            
+            if args.explain and word_count >= 3:
+                explanation_html = await llm_call.generate_explanation(
+                    sentence=target_sentence_for_expl,
+                    source_lang=args.source,
+                    target_lang=args.target
+                )
 
         ipa_transcription = ipa.get_ipa(text_for_ipa, args.target) if text_for_ipa else ""
+        
+        # Prepare kwargs for 'declension' specifics
+        extra_kwargs = {}
+        if args.mode == "declension":
+            extra_kwargs = {
+                "root_word": root_word,
+                "case_info": case_info
+            }
 
         flashcard = anki_creator.create_flashcard(
             audio, 
@@ -195,6 +251,7 @@ async def main():
             translation_text=translation_text,
             explanation_text=explanation_html,
             mode=args.mode,
+            **extra_kwargs
         )
         flashcards.append(flashcard)
 
@@ -203,7 +260,8 @@ async def main():
             await asyncio.sleep(1.5)
 
     deck_name = f"{args.mode.capitalize()}: {args.topic}"
-    filename = f"anki_{args.topic.replace(' ', '_')}_{args.target}.apkg"
+    safe_topic = args.topic.replace(" ", "_").replace("/", "-")
+    filename = f"anki_{safe_topic[:50]}_{args.target}.apkg"
     
     anki_creator.create_deck(flashcards, deck_name=deck_name, output_file=filename)
     

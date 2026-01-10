@@ -1,5 +1,5 @@
 import requests
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 
 def get(query: str) -> bytes | None:
     """

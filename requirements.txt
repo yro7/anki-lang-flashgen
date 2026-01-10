@@ -1,0 +1,9 @@
+google-genai
+edge-tts
+genanki
+requests
+duckduckgo-search
+phonemizer
+python-dotenv
+streamlit
+watchdog

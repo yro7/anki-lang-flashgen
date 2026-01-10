@@ -9,10 +9,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-if "GOOGLE_API_KEY" not in os.environ:
-    raise ValueError("Missing GOOGLE_API_KEY env variable.")
 
-client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+def get_client():
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("Missing GOOGLE_API_KEY environment variable. Please set it in .env or your application secrets.")
+    return genai.Client(api_key=api_key)
+
 
 
 
@@ -94,14 +97,75 @@ Provide a **concise and direct** grammatical explanation in the **SOURCE LANGUAG
 Return ONLY the raw HTML string.
 """
 
+CUSTOM_SYSTEM_PROMPT = """
+You are a versatile Anki card generator buffer.
+
+### GOAL
+Follow the user's `Topic` instruction explicitly to generate content.
+The user might ask for translations, grammar exercises, code snippets, or riddles.
+Your job is to strictly follow the instruction and output the result in JSON.
+
+### GUIDELINES
+1. **Format**: Output strictly a valid JSON array. NO Markdown code blocks.
+2. **Structure**: Each object must have exactly two keys: "source" and "target".
+   - "source": This will go on the FRONT of the card.
+   - "target": This will go on the BACK of the card.
+3. **Content**: Derived entirely from the user's detailed topic instruction.
+
+### ONE-SHOT EXAMPLE
+User Input:
+Topic: "Generate true/false questions about Python. front=statement, back=True/False"
+Count: 2
+
+Your Output:
+[
+  {"source": "Python lists are immutable.", "target": "False"},
+  {"source": "Def defines a function.", "target": "True"}
+]
+"""
+
+DECLENSION_SYSTEM_PROMPT = """
+You are an expert Polish Grammar Teacher.
+
+### GOAL
+Generate a list of sentences to practice grammatical DECLENSIONS (Cases).
+Follow the user's Topic instructions regarding which words/cases to target.
+
+### FORMAT
+Output strictly a valid JSON array.
+Each object must have these keys:
+- "sentence_fr": The French translation.
+- "sentence_pl_masked": The Polish sentence, but replace the target word with 3 underscores "___".
+- "root_word": The target word in Nominative (Mianownik).
+- "declined_word": The target word correctly declined.
+- "case_name_source": The name of the grammatical case in French (e.g., Datif, Locatif).
+- "case_name_target": The name of the grammatical case in Polish (e.g., Celownik, Miejscownik).
+
+### EXAMPLE
+User Input: "Create exercises for 'Kot' (Cat) in Genitive."
+Output:
+[
+  {
+    "sentence_fr": "Je ne vois pas de chat ici.",
+    "sentence_pl_masked": "Nie widzę tutaj ___.",
+    "root_word": "Kot",
+    "declined_word": "kota",
+    "case_name_source": "Génitif",
+    "case_name_target": "Dopełniacz"
+  }
+]
+"""
+
 async def generate_vocab(topic: str, source_lang: str, target_lang: str, count: int, mode: str = "translation") -> list:
     """
     Generate vocabulary list.
     Args:
-        mode: 'translation' (default) or 'listening'.
+        mode: 'translation' (default), 'listening', 'cloze', 'custom', or 'declension'.
     """
     
     mode_instruction = ""
+    system_instruction = VOCAB_SYSTEM_PROMPT # Default
+
     if mode == "listening":
         mode_instruction = "CONTEXT: This list is for an Oral Comprehension exercise. Choose words/phrases that are distinct and good for listening practice."
     elif mode == "cloze":
@@ -111,6 +175,20 @@ async def generate_vocab(topic: str, source_lang: str, target_lang: str, count: 
         - "target": A full sentence in Target Language containing the translated word, where the word to guess is surrounded by angle brackets like <word>.
         - "translation": The full sentence translated back into Source Language.
         Example: Source="Banana", Target="The monkey eats a <banana>.", Translation="Le singe mange une banane."
+        """
+    elif mode == "custom":
+        system_instruction = CUSTOM_SYSTEM_PROMPT
+        mode_instruction = f"""
+        INSTRUCTION: {topic}
+        
+        (Note: 'source_lang' was set to {source_lang} and 'target_lang' to {target_lang} by CLI args, but you may prioritize the INSTRUCTION above if it overrides them.)
+        """
+    elif mode == "declension":
+        system_instruction = DECLENSION_SYSTEM_PROMPT
+        mode_instruction = f"""
+        INSTRUCTION: {topic}
+        
+        Generate {count} examples adhering strictly to the JSON format for DECLENSIONS.
         """
 
     user_prompt = f"""
@@ -126,11 +204,12 @@ async def generate_vocab(topic: str, source_lang: str, target_lang: str, count: 
     print(f"⏳ (Gemini) Generation for : '{topic}' (Mode: {mode})...")
 
     try:
+        client = get_client()
         response = client.models.generate_content(
             model="gemini-2.5-flash", 
             contents=user_prompt,
             config=types.GenerateContentConfig(
-                system_instruction=VOCAB_SYSTEM_PROMPT,
+                system_instruction=system_instruction,
                 temperature=0.4,
                 response_mime_type="application/json"
             )
@@ -164,25 +243,36 @@ if __name__ == "__main__":
     expl = asyncio.run(generate_explanation("J'habite à Paris.", "fr", "en"))
     print(expl)
 
-async def generate_explanation(sentence: str, source_lang: str, target_lang: str) -> str:
+async def generate_explanation(sentence: str, source_lang: str, target_lang: str, mode: str = "translation") -> str:
     """
     Generate a grammatical explanation for a sentence.
     """
-    prompt = f"""
-    Source Language: "{source_lang}"
-    Target Language: "{target_lang}"
-    Sentence to explain: "{sentence}"
+    if mode == "declension":
+        prompt = f"""
+        Source Language: "{source_lang}"
+        Target Language: "{target_lang}"
+        Sentence Context: "{sentence}"
+        
+        Explain strictly WHY the target word is declined this way (Case usage).
+        Briefly mention the rule.
+        """
+    else:
+        prompt = f"""
+        Source Language: "{source_lang}"
+        Target Language: "{target_lang}"
+        Sentence to explain: "{sentence}"
+        
+        Explain the grammar, structure, and nuances.
+        """
     
-    Explain the grammar, structure, and nuances.
-    """
-    
-    print(f"🧠 (Gemini) Generating explanation for : '{sentence}'...")
+    print(f"🧠 (Gemini) Generating explanation for : '{sentence[:50]}...'...")
 
     max_retries = 3
     base_delay = 2
 
     for attempt in range(max_retries):
         try:
+            client = get_client()
             response = client.models.generate_content(
                 model="gemini-2.5-flash", 
                 contents=prompt,
